@@ -56,7 +56,7 @@ jobs:
       - name: Check for existing EC2 before destroy
         run: |
           chmod +x scripts/check-existing-ec2.sh
-          PROJECT_NAME="$PROJECT_NAME" ENVIRONMENT="$ENVIRONMENT" AWS_REGION="$AWS_REGION" ./scripts/check-existing-ec2.sh || true
+          PROJECT_NAME="$PROJECT_NAME" ENVIRONMENT="$ENVIRONMENT" AWS_REGION="$AWS_REGION" STACK_NAME="${PROJECT_NAME}-${ENVIRONMENT}" ./scripts/check-existing-ec2.sh
           echo "Destroy requests are intentionally manual and must be reviewed before execution."
 
       - name: Setup Terraform

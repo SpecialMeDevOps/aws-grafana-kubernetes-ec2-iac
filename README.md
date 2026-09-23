@@ -459,7 +459,8 @@ The repository includes `scripts/check-existing-ec2.sh` to help prevent accident
 
 The logic is intentionally conservative:
 
-- If a matching EC2 instance is detected, the workflow stops and explains the situation.
+- If a matching EC2 instance is already managed by the expected CloudFormation stack, the workflow reports it and continues safely.
+- If an unrelated matching EC2 instance is detected, the workflow stops and explains the situation.
 - The user must review the instance before proceeding.
 - The project never silently destroys an EC2 instance.
 - If Terraform state is missing but infrastructure exists, the operator is told to review the environment carefully before replacing or importing resources.
