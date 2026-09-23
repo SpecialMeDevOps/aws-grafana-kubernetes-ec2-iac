@@ -19,7 +19,7 @@ jobs:
 
     env:
       TF_IN_AUTOMATION: true
-      AWS_REGION: us-east-1
+      AWS_REGION: ${{ vars.AWS_REGION }}
       PROJECT_NAME: aws-grafana-kubernetes-ec2-iac
       ENVIRONMENT: dev
 
@@ -34,17 +34,20 @@ jobs:
             exit 1
           fi
 
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Verify AWS identity
+        run: aws sts get-caller-identity
+
       - name: Check for existing EC2 before destroy
         run: |
           chmod +x scripts/check-existing-ec2.sh
           PROJECT_NAME="$PROJECT_NAME" ENVIRONMENT="$ENVIRONMENT" AWS_REGION="$AWS_REGION" ./scripts/check-existing-ec2.sh || true
           echo "Destroy requests are intentionally manual and must be reviewed before execution."
-
-      - name: Configure AWS credentials via OIDC
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-region: ${{ env.AWS_REGION }}
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
