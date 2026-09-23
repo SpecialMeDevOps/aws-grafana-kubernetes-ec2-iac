@@ -1,0 +1,36 @@
+# Terraform
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+crash.log
+*.tfvars
+!terraform/terraform.tfvars.example
+
+# Local secrets and keys
+*.pem
+*.key
+*.p8
+.env
+.env.*
+
+# OS/editor artifacts
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.tmp
+
+# Logs
+*.log
+
+# AWS / CloudFormation local caches
+.aws-sam/
+
+# Local repo docs placeholders
+/docs/screenshots/*.png
+/docs/screenshots/*.jpg
+/docs/screenshots/*.jpeg
+
+# Keep directories tracked
+!.gitkeep

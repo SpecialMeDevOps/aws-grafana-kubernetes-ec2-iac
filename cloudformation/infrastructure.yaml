@@ -1,0 +1,269 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Production-style VPC, networking, security group, EC2 bootstrap, and S3 key storage for a Grafana/Kubernetes demo environment.
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: aws-grafana-kubernetes-ec2-iac
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - staging
+      - prod
+  VpcCidr:
+    Type: String
+    Default: 10.10.0.0/16
+  PublicSubnetCidr:
+    Type: String
+    Default: 10.10.1.0/24
+  InstanceType:
+    Type: String
+    Default: t3.medium
+  LatestAmiId:
+    Type: AWS::EC2::Image::Id
+  KeyPairName:
+    Type: String
+    Default: aws-grafana-kubernetes-ec2-iac-dev-key
+  S3BucketName:
+    Type: String
+    Default: aws-grafana-kubernetes-ec2-iac-dev-ssh-keys
+  SSHLocation:
+    Type: String
+    Default: 0.0.0.0/0
+    Description: CIDR allowed to access SSH.
+  AppPort:
+    Type: Number
+    Default: 80
+  GrafanaPort:
+    Type: Number
+    Default: 3000
+  NodePort:
+    Type: Number
+    Default: 30080
+  BootstrapScriptUrl:
+    Type: String
+    Default: https://raw.githubusercontent.com/SpecialMeDevOps/aws-grafana-kubernetes-ec2-iac/main/scripts/bootstrap.sh
+  GitHubRepository:
+    Type: String
+    Default: SpecialMeDevOps/aws-grafana-kubernetes-ec2-iac
+
+Resources:
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCidr
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${Environment}-vpc'
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${Environment}-igw'
+
+  GatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref Vpc
+      InternetGatewayId: !Ref InternetGateway
+
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: !Ref PublicSubnetCidr
+      AvailabilityZone: !Select [0, !GetAZs '']
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${Environment}-public-subnet'
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${Environment}-public-rt'
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: GatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet
+      RouteTableId: !Ref PublicRouteTable
+
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub '${ProjectName}-${Environment}-sg'
+      VpcId: !Ref Vpc
+      GroupDescription: Security group for Grafana, application, and SSH access.
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref SSHLocation
+        - IpProtocol: tcp
+          FromPort: !Ref AppPort
+          ToPort: !Ref AppPort
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: !Ref GrafanaPort
+          ToPort: !Ref GrafanaPort
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: !Ref NodePort
+          ToPort: !Ref NodePort
+          CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${Environment}-sg'
+
+  KeyPair:
+    Type: AWS::EC2::KeyPair
+    Properties:
+      KeyName: !Ref KeyPairName
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+
+  SshKeyBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Ref S3BucketName
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${Environment}-ssh-bucket'
+
+  EC2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref EC2InstanceRole
+
+  EC2InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
+      Policies:
+        - PolicyName: S3KeyBucketAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: AllowKeyAccess
+                Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:GetObject
+                  - s3:ListBucket
+                Resource:
+                  - !Sub '${SshKeyBucket.Arn}'
+                  - !Sub '${SshKeyBucket.Arn}/*'
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${Environment}-ec2-role'
+
+  EC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref LatestAmiId
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyPairName
+      SubnetId: !Ref PublicSubnet
+      SecurityGroupIds:
+        - !Ref SecurityGroup
+      IamInstanceProfile: !Ref EC2InstanceProfile
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -euxo pipefail
+          export DEBIAN_FRONTEND=noninteractive
+          exec > >(tee -a /var/log/bootstrap.log) 2>&1
+
+          curl -fsSL "${BootstrapScriptUrl}" -o /opt/bootstrap.sh
+          chmod +x /opt/bootstrap.sh
+          /opt/bootstrap.sh "${GitHubRepository}"
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${Environment}-ec2'
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+
+Outputs:
+  VpcId:
+    Description: VPC ID created by the stack.
+    Value: !Ref Vpc
+  SubnetId:
+    Description: Public subnet ID created by the stack.
+    Value: !Ref PublicSubnet
+  SecurityGroupId:
+    Description: Security group ID created by the stack.
+    Value: !Ref SecurityGroup
+  InstanceId:
+    Description: EC2 instance ID.
+    Value: !Ref EC2Instance
+  PublicIp:
+    Description: EC2 public IP.
+    Value: !GetAtt EC2Instance.PublicIp
+  PublicDnsName:
+    Description: EC2 public DNS.
+    Value: !GetAtt EC2Instance.PublicDnsName
+  KeyPairName:
+    Description: Name of the generated EC2 key pair.
+    Value: !Ref KeyPairName
+  S3BucketName:
+    Description: S3 bucket containing the SSH private key.
+    Value: !Ref SshKeyBucket

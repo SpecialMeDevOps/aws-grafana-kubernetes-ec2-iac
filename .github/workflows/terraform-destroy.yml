@@ -1,0 +1,58 @@
+name: Terraform Destroy
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_destroy:
+        description: Type DESTROY to permanently delete the infrastructure.
+        required: true
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  destroy:
+    name: Terraform destroy
+    runs-on: ubuntu-latest
+
+    env:
+      TF_IN_AUTOMATION: true
+      AWS_REGION: us-east-1
+      PROJECT_NAME: aws-grafana-kubernetes-ec2-iac
+      ENVIRONMENT: dev
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate explicit destroy confirmation
+        run: |
+          if [ "${{ github.event.inputs.confirm_destroy }}" != "DESTROY" ]; then
+            echo "Destroy workflow requires the exact value DESTROY in the confirm_destroy input."
+            exit 1
+          fi
+
+      - name: Check for existing EC2 before destroy
+        run: |
+          chmod +x scripts/check-existing-ec2.sh
+          PROJECT_NAME="$PROJECT_NAME" ENVIRONMENT="$ENVIRONMENT" AWS_REGION="$AWS_REGION" ./scripts/check-existing-ec2.sh || true
+          echo "Destroy requests are intentionally manual and must be reviewed before execution."
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.6
+
+      - name: Terraform init
+        run: terraform -chdir=terraform init
+
+      - name: Terraform destroy
+        run: terraform -chdir=terraform destroy -auto-approve
