@@ -255,7 +255,7 @@ The EC2 instance automatically runs the bootstrap script from `scripts/bootstrap
 The bootstrap process is designed to install and configure:
 
 - Docker
-- Kubernetes (K3s single-node cluster)
+- Kubernetes (K3s single-node cluster on Amazon Linux 2)
 - Helm
 - Prometheus
 - Grafana
@@ -264,6 +264,8 @@ The bootstrap process is designed to install and configure:
 - Logging in `/var/log/bootstrap.log`
 
 The script logs progress and fails clearly if a required step breaks.
+
+Terraform selects the latest Amazon Linux 2 x86_64 AMI published by Amazon through the `amazon_linux_2` data source. The bootstrap therefore uses Amazon Linux 2 `yum` and `amazon-linux-extras` commands rather than Debian/Ubuntu `apt-get` commands.
 
 ### Checking bootstrap status
 
@@ -314,6 +316,8 @@ kubectl get svc -A
 
 The application is exposed with a NodePort service on port `30080`.
 
+K3s is configured to allow the requested Grafana NodePort `3000`; the default Kubernetes NodePort range normally starts at `30000`.
+
 ## Application Deployment
 
 The sample app is a lightweight `nginx` page that explains the stack:
@@ -353,7 +357,7 @@ The default admin password is intentionally set to a temporary value during depl
 
 - `admin123`
 
-This is a demo-only value and should be changed immediately in a real environment.
+This is a demo-only value and should be changed immediately in a real environment. It is currently passed to Helm during bootstrap and is not suitable for production. A production deployment should source the password from a protected secret mechanism rather than storing it in a command or repository.
 
 Grafana is exposed at:
 
@@ -590,6 +594,24 @@ kubectl logs -n monitoring deploy/kube-prometheus-prometheus
 
 ```bash
 sudo tail -f /var/log/bootstrap.log
+```
+
+On this project’s Amazon Linux 2 AMI, package installation uses `yum` and Docker uses the `amazon-linux-extras` Docker channel. If the log contains `apt-get: command not found`, the instance is running the old incompatible bootstrap script; redeploy the stack or rerun the current script after confirming the repository URL points to the `main` branch.
+
+### K3s or kubectl failure
+
+```bash
+sudo systemctl status k3s
+sudo journalctl -u k3s -n 100 --no-pager
+sudo KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl get nodes
+```
+
+### Grafana pod not ready
+
+```bash
+sudo KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl get pods -n monitoring
+sudo KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl describe pod -n monitoring -l app.kubernetes.io/name=grafana
+sudo KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl logs -n monitoring -l app.kubernetes.io/name=grafana
 ```
 
 ### GitHub Actions authentication failure

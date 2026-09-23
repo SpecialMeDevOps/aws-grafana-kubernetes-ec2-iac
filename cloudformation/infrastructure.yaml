@@ -228,7 +228,6 @@ Resources:
         Fn::Base64: !Sub |
           #!/bin/bash
           set -euxo pipefail
-          export DEBIAN_FRONTEND=noninteractive
           exec > >(tee -a /var/log/bootstrap.log) 2>&1
 
           curl -fsSL "${BootstrapScriptUrl}" -o /opt/bootstrap.sh
