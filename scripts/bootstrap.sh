@@ -27,7 +27,7 @@ if [[ "${EUID}" -ne 0 ]]; then
   exit 1
 fi
 
-if [[ ! -f /etc/system-release ]] || ! grep -q "Amazon Linux 2" /etc/system-release; then
+if [[ ! -f /etc/system-release ]] || ! grep -Eq "Amazon Linux (2|release 2)" /etc/system-release; then
   echo "Unsupported operating system. This bootstrap requires Amazon Linux 2." >&2
   cat /etc/system-release 2>/dev/null || true
   exit 1
