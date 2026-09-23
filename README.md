@@ -181,6 +181,14 @@ Example IAM trust policy for the GitHub role:
 }
 ```
 
+For this repository, replace `<ACCOUNT_ID>` with the AWS account ID and use this exact subject:
+
+```text
+repo:SpecialMeDevOps/aws-grafana-kubernetes-ec2-iac:ref:refs/heads/main
+```
+
+The OIDC provider URL must be `token.actions.githubusercontent.com`, and the audience must be `sts.amazonaws.com`. The `AWS_ROLE_ARN` repository secret must contain the ARN of this exact role, not a different role with a similar name.
+
 Grant access only to the exact actions and resources you need.
 
 ## Repository Configuration

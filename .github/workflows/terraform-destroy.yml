@@ -27,6 +27,14 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Require deployment branch
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "This destroy workflow must run from the main branch."
+            echo "Current ref: $GITHUB_REF"
+            exit 1
+          fi
+
       - name: Validate explicit destroy confirmation
         run: |
           if [ "${{ github.event.inputs.confirm_destroy }}" != "DESTROY" ]; then
@@ -41,7 +49,9 @@ jobs:
           aws-region: ${{ vars.AWS_REGION }}
 
       - name: Verify AWS identity
-        run: aws sts get-caller-identity
+        run: |
+          aws sts get-caller-identity
+          aws configure list
 
       - name: Check for existing EC2 before destroy
         run: |
